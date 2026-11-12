@@ -2,6 +2,7 @@ import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 import type { AntigravityRouting, ThinkingWire } from "../types/types.js";
 import { ThinkingEffort } from "../types/enums.js";
 import type { AntigravityCatalog } from "./grouping.js";
+import { isPlanDisabledRuntimeModelId } from "../utils/util.js";
 
 export const PROVIDER_ID = "antigravity";
 export const PROVIDER_NAME = "Antigravity";
@@ -379,6 +380,15 @@ export function resetAntigravityCatalogForTests(): void {
 
 /** Resolve public model id + thinking effort to Antigravity runtime model id. */
 export function getAntigravityRequestModelId(modelId: string, effort: string | undefined): string {
+  // A session can still hold a plan-disabled selection from an older catalog.
+  // The server answers it with a generic RESOURCE_EXHAUSTED, so explain it here.
+  if (isPlanDisabledRuntimeModelId(modelId)) {
+    throw new Error(
+      `Antigravity lists ${modelId} as unavailable on this account's plan ` +
+        "(Google gates some models by subscription, e.g. Gemini 4 Carbon to Google AI Ultra). " +
+        "Next: check your plan with /antigravity.usage, run /antigravity.refresh, and select an available model.",
+    );
+  }
   // A selected model can outlive a catalog refresh (for example in a resumed
   // session). Do not resurrect a retired route from the bootstrap catalog.
   if (

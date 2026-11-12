@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- **Plan-gated models:** Antigravity lists models the account's plan cannot use under a `-disabled` runtime id (for example `gemini-4-carbon-disabled` outside Google AI Ultra). These entries are no longer offered as selectable models, persisted catalogs drop them, and a session that still selects one gets a plan explanation instead of a misleading capacity 429. The catalog schema version is bumped so the next start rediscovers models.
 - Declare `typebox` as a `"*"` peer dependency instead of a runtime dependency, as Pi requires for host-provided packages. This clears Pi's "Host-provided extension packages must be declared in peerDependencies" extension warning and avoids installing a duplicate TypeBox copy.
 - **Thinking-off and capacity 429s:** A generic `RESOURCE_EXHAUSTED` response now tries the other endpoints and one same-generation sibling tier, so `gemini-3.8-flash` with reasoning off is not stuck on a dead `-low` runtime and `gemini-4-argon-high` can step down while quota remains (#125, #122). Hard quota walls with a reset time are unchanged.
 - **`before_provider_request`:** `streamAntigravity` applies `onPayload` to the final request body before it is sent (#126).
