@@ -1,5 +1,4 @@
-import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
-import type { AntigravityRouting, ThinkingWire } from "../types/types.js";
+import type { AntigravityModelConfig, AntigravityRouting, ThinkingWire } from "../types/types.js";
 import { ThinkingEffort } from "../types/enums.js";
 import type { AntigravityCatalog } from "./grouping.js";
 import { antigravityEnv, isPlanDisabledRuntimeModelId } from "../utils/util.js";
@@ -267,10 +266,10 @@ const thinkingLevelMaps = {
     xhigh: null,
     max: null,
   },
-} satisfies Record<string, ProviderModelConfig["thinkingLevelMap"]>;
+} satisfies Record<string, AntigravityModelConfig["thinkingLevelMap"]>;
 
 /** Same set as `agy models`, collapsed to public Pi model IDs. */
-export const ANTIGRAVITY_MODELS: ProviderModelConfig[] = [
+export const ANTIGRAVITY_MODELS: AntigravityModelConfig[] = [
   {
     id: "gemini-3.8-flash",
     name: "Gemini 3.8 Flash (Antigravity)",
@@ -353,10 +352,10 @@ export const ANTIGRAVITY_MODELS: ProviderModelConfig[] = [
   },
 ];
 
-let currentModels: ProviderModelConfig[] = ANTIGRAVITY_MODELS;
+let currentModels: AntigravityModelConfig[] = ANTIGRAVITY_MODELS;
 let currentRouting: Record<string, AntigravityRouting> = { ...ANTIGRAVITY_ROUTING };
 
-export function getCurrentAntigravityModels(): ProviderModelConfig[] {
+export function getCurrentAntigravityModels(): AntigravityModelConfig[] {
   return currentModels;
 }
 

@@ -6,6 +6,7 @@ import type {
   ThinkingContent,
   ToolCall,
 } from "@earendil-works/pi-ai";
+import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 import type { GeminiRole, GeminiToolCallingMode, ThinkingEffort, ToolChoice } from "./enums.js";
 
 // OAuth & Auth Types
@@ -34,6 +35,13 @@ export type CallbackServer = {
 };
 
 // Model Types
+/**
+ * Antigravity only registers chat models. Pi 1.5 widened `ProviderModelConfig`
+ * into a chat/image/classifier union; on older Pi hosts it was the chat shape
+ * itself, so this narrows to the same structure on both.
+ */
+export type AntigravityModelConfig = Extract<ProviderModelConfig, { reasoning: boolean }>;
+
 export type AntigravityRouting = {
   off?: string;
   routing?: Partial<Record<ThinkingEffort, string>>;
