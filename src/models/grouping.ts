@@ -1,11 +1,10 @@
-import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 import { ThinkingEffort } from "../types/enums.js";
-import type { AntigravityRouting, ModelInfoRaw } from "../types/types.js";
+import type { AntigravityModelConfig, AntigravityRouting, ModelInfoRaw } from "../types/types.js";
 import { isPlanDisabledRuntimeModelId, isRecord } from "../utils/util.js";
 import { getAntigravityModelCost } from "./models.js";
 
 export type AntigravityCatalog = {
-  models: ProviderModelConfig[];
+  models: AntigravityModelConfig[];
   routing: Record<string, AntigravityRouting>;
 };
 
@@ -133,7 +132,7 @@ export function buildAntigravityCatalog(
 
   if (groups.size === 0) throw new Error("Antigravity catalog contains no supported chat models");
 
-  const models: ProviderModelConfig[] = [];
+  const models: AntigravityModelConfig[] = [];
   const routing: Record<string, AntigravityRouting> = {};
 
   for (const group of groups.values()) {
@@ -262,8 +261,8 @@ function displayFamily(displayName: string | undefined): string | undefined {
 
 function synthesizeModel(
   group: RuntimeGroup,
-  fallbackModels: ProviderModelConfig[],
-): { model: ProviderModelConfig; routing: AntigravityRouting } {
+  fallbackModels: AntigravityModelConfig[],
+): { model: AntigravityModelConfig; routing: AntigravityRouting } {
   const template = familyTemplate(group.publicId, fallbackModels);
   const advertisedLevels = advertisedThinkingLevels(group);
   const routing = routingFromVariants(group.publicId, group.variants, group.unsuffixed);
@@ -366,8 +365,10 @@ function routingFromVariants(
   };
 }
 
-function thinkingLevelMapFromLevels(levels: Set<string>): ProviderModelConfig["thinkingLevelMap"] {
-  const map: NonNullable<ProviderModelConfig["thinkingLevelMap"]> = {};
+function thinkingLevelMapFromLevels(
+  levels: Set<string>,
+): AntigravityModelConfig["thinkingLevelMap"] {
+  const map: NonNullable<AntigravityModelConfig["thinkingLevelMap"]> = {};
   for (const level of PI_LEVELS) {
     map[level] = levels.has(level) ? level : null;
   }
@@ -376,8 +377,8 @@ function thinkingLevelMapFromLevels(levels: Set<string>): ProviderModelConfig["t
 
 function familyTemplate(
   publicId: string,
-  fallbackModels: ProviderModelConfig[],
-): ProviderModelConfig | undefined {
+  fallbackModels: AntigravityModelConfig[],
+): AntigravityModelConfig | undefined {
   if (/^gemini-.*-flash/i.test(publicId)) {
     return fallbackModels.find((model) => /^gemini-.*-flash/i.test(model.id));
   }
@@ -446,7 +447,7 @@ function parseGeminiVersion(id: string): number {
   return Number(match[1]) * 1000 + Number(match[2] || 0);
 }
 
-function comparePublicModels(a: ProviderModelConfig, b: ProviderModelConfig): number {
+function comparePublicModels(a: AntigravityModelConfig, b: AntigravityModelConfig): number {
   const rankA = modelRank(a.id);
   const rankB = modelRank(b.id);
   if (rankA[0] !== rankB[0]) return rankA[0] - rankB[0];

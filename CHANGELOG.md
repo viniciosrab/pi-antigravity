@@ -9,6 +9,10 @@ All notable changes to this project are documented in this file.
 - **Gemini Enterprise routing:** `ANTIGRAVITY_LOCATION=eu|us` (or `ANTIGRAVITY_ENTERPRISE=1`) sends inference only to the documented Business AI Code host for that location. Consumer `cloudcode-pa` fallback is not used, so a regional license is not retried on the endpoint that returns error #3501. Image prompts and reference images are not uploaded while enterprise routing is active.
 - **`read_url_content` tool:** Reads public pages through Google's Antigravity fetch service and converts HTML to Markdown. Inadequate cached copies retry live, with useful cached content retained on recovery failure. The tool inspects metadata and article-matched JSON-LD before cleanup, and can recover through one advertised same-origin Markdown or supported article-JSON representation. Results distinguish source completeness, suspected content problems, and output truncation, and report retrieval attempts and provenance. Pages too long for one answer are saved whole to a private temp file named in the answer. `/antigravity.fetch [--raw] <url>` exposes interactive fetching; raw mode preserves the crawled source. Disable with `ANTIGRAVITY_NO_FETCH_TOOL=1`, `ANTIGRAVITY_NO_EXTRA_TOOLS=1`, or the `read-url-content` resource in `pi config`.
 
+### Changed
+
+- Development toolchain now builds against Pi 1.5 types (`@earendil-works/pi-ai` / `pi-coding-agent` 1.5) and type-checks with TypeScript 7; ESLint keeps the TypeScript 6 API through the `@typescript/typescript6` alias until typescript-eslint supports TS 7. No user-visible change: peer ranges are unchanged and the extension still runs on Pi 0.80 and later.
+
 ### Fixed
 
 - **Plan-gated models:** Antigravity lists models the account's plan cannot use under a `-disabled` runtime id (for example `gemini-4-carbon-disabled` outside Google AI Ultra). These entries are no longer offered as selectable models, persisted catalogs drop them, and a session that still selects one gets a plan explanation instead of a misleading capacity 429. The catalog schema version is bumped so the next start rediscovers models.
