@@ -29,6 +29,7 @@ import {
   refreshAntigravityModels,
   registerModelEnum,
   resetAntigravityCatalogForTests,
+  resolveRequestRuntimeModel,
   snapshotDynamicModelEnums,
   type AntigravityCatalog,
 } from "../src/models/index.js";
@@ -849,6 +850,38 @@ assert.equal(
               "(Google gates some models by subscription, e.g. Gemini 4 Carbon to Google AI Ultra). " +
               "Next: check your plan with /antigravity.usage, run /antigravity.refresh, and select an available model.",
       );
+    }
+
+    // The final runtime id is checked too: a route value and the explicit
+    // ANTIGRAVITY_RUNTIME_MODEL override must not reach a plan-disabled id.
+    const planError = (id: string) => (error: unknown) =>
+      error instanceof Error &&
+      error.message.startsWith(`Antigravity lists ${id} as unavailable on this account's plan `);
+    applyAntigravityCatalog({
+      models: [flash],
+      routing: { "gemini-3.8-flash": disabledRoute },
+    });
+    assert.throws(
+      () => getAntigravityRequestModelId("gemini-3.8-flash", "off"),
+      planError("gemini-4-carbon-disabled"),
+    );
+    applyAntigravityCatalog(planGatedCatalog);
+    const savedOverride = process.env.ANTIGRAVITY_RUNTIME_MODEL;
+    try {
+      process.env.ANTIGRAVITY_RUNTIME_MODEL = "gemini-4-carbon-disabled";
+      assert.throws(
+        () => resolveRequestRuntimeModel("gemini-3.8-flash", "high"),
+        planError("gemini-4-carbon-disabled"),
+      );
+      process.env.ANTIGRAVITY_RUNTIME_MODEL = " gemini-4-carbon-high ";
+      assert.equal(resolveRequestRuntimeModel("gemini-3.8-flash", "high"), "gemini-4-carbon-high");
+      // The override still bypasses catalog membership, as before.
+      assert.equal(resolveRequestRuntimeModel("gemini-3.6-flash", "high"), "gemini-4-carbon-high");
+      delete process.env.ANTIGRAVITY_RUNTIME_MODEL;
+      assert.equal(resolveRequestRuntimeModel("gemini-3.8-flash", "high"), "gemini-3.8-flash-high");
+    } finally {
+      if (savedOverride === undefined) delete process.env.ANTIGRAVITY_RUNTIME_MODEL;
+      else process.env.ANTIGRAVITY_RUNTIME_MODEL = savedOverride;
     }
   } finally {
     resetAntigravityCatalogForTests();
