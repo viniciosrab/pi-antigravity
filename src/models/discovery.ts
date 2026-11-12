@@ -10,7 +10,7 @@ import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 import { getApiKey } from "../auth/index.js";
 import { DEFAULT_ENDPOINT, fetchAvailableModelsCatalog, parseApiKey } from "../client/index.js";
 import { ANTIGRAVITY_API } from "../types/types.js";
-import { antigravityEnv, isRecord } from "../utils/util.js";
+import { antigravityEnv, isPlanDisabledRuntimeModelId, isRecord } from "../utils/util.js";
 import { buildAntigravityCatalog, resolvedCatalog, type AntigravityCatalog } from "./grouping.js";
 import {
   ANTIGRAVITY_MODELS,
@@ -24,7 +24,8 @@ import {
 
 export const DEFAULT_CATALOG_REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000;
 export const ANTIGRAVITY_PERSIST_KEY = "pi-antigravity";
-export const CATALOG_SCHEMA_VERSION = 2;
+// 3: plan-disabled (`-disabled`) entries are no longer catalog models.
+export const CATALOG_SCHEMA_VERSION = 3;
 
 type PersistedAntigravityCatalog = {
   catalog: AntigravityCatalog;
@@ -56,7 +57,10 @@ export function hydrateAntigravityCatalog(stored: unknown): number {
   if (!isRecord(persisted)) return 0;
 
   if (isStringMap(persisted.modelEnums)) restoreDynamicModelEnums(persisted.modelEnums);
-  if (isCatalog(persisted.catalog)) applyAntigravityCatalog(persisted.catalog);
+  if (isCatalog(persisted.catalog)) {
+    const catalog = withoutPlanDisabledModels(persisted.catalog);
+    if (catalog.models.length > 0) applyAntigravityCatalog(catalog);
+  }
   return typeof persisted.checkedAt === "number" && persisted.checkedAt > 0
     ? persisted.checkedAt
     : 0;
@@ -141,6 +145,16 @@ export async function refreshAntigravityModels(
   }
 
   return getCurrentAntigravityCatalog().models;
+}
+
+/** Catalogs persisted before schema 3 can still hold plan-disabled models. */
+function withoutPlanDisabledModels(catalog: AntigravityCatalog): AntigravityCatalog {
+  return {
+    models: catalog.models.filter((model) => !isPlanDisabledRuntimeModelId(model.id)),
+    routing: Object.fromEntries(
+      Object.entries(catalog.routing).filter(([id]) => !isPlanDisabledRuntimeModelId(id)),
+    ),
+  };
 }
 
 function isCatalog(value: unknown): value is AntigravityCatalog {

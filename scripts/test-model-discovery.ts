@@ -8,6 +8,7 @@ import {
   antigravityHeaders,
   defaultUserAgent,
   fetchAvailableRuntimeModel,
+  isUsableRuntimeModelId,
   mergeAvailableModelsResults,
 } from "../src/client/index.js";
 import {
@@ -20,6 +21,7 @@ import {
   clearModelEnumCache,
   extractRecommendedModelIds,
   getAntigravityRequestModelId,
+  getCurrentAntigravityCatalog,
   getFallbackRuntimeModel,
   getModelEnum,
   getMaxOutputTokens,
@@ -27,6 +29,7 @@ import {
   refreshAntigravityModels,
   registerModelEnum,
   resetAntigravityCatalogForTests,
+  resolveRequestRuntimeModel,
   snapshotDynamicModelEnums,
   type AntigravityCatalog,
 } from "../src/models/index.js";
@@ -766,5 +769,123 @@ assert.equal(
   undefined,
   "endpoints without recommendation lists stay undefined",
 );
+
+// Plan-gated models: the catalog lists models the account's plan cannot use
+// (Gemini 4 Carbon outside Google AI Ultra, Argon outside a paid plan) under a
+// `-disabled` runtime id. They must never become selectable or routable.
+{
+  const planGatedSorts = [
+    {
+      displayName: "Recommended",
+      groups: [
+        {
+          modelIds: [
+            "gemini-4-carbon-disabled",
+            "gemini-4-argon-disabled",
+            "gemini-3.8-flash-low",
+            "gemini-3.8-flash-high",
+          ],
+        },
+      ],
+    },
+  ];
+  const planGatedCatalog = buildAntigravityCatalog(
+    {
+      "gemini-4-carbon-disabled": info("Gemini 4 Carbon"),
+      "gemini-4-argon-disabled": info("Gemini 4 Argon"),
+      "gemini-3.8-flash-low": info("Gemini 3.8 Flash (Low)"),
+      "gemini-3.8-flash-high": info("Gemini 3.8 Flash (High)"),
+    },
+    fallback,
+    planGatedSorts,
+  );
+  assert.deepEqual(
+    planGatedCatalog.models.map((model) => model.id),
+    ["gemini-3.8-flash"],
+    "plan-disabled catalog entries are not selectable models",
+  );
+  assert.deepEqual(
+    Object.keys(planGatedCatalog.routing),
+    ["gemini-3.8-flash"],
+    "plan-disabled catalog entries get no route",
+  );
+  assert.equal(isUsableRuntimeModelId("gemini-4-carbon-disabled"), false);
+  assert.equal(isUsableRuntimeModelId("GEMINI-4-ARGON-DISABLED"), false);
+  assert.equal(isUsableRuntimeModelId("gemini-4-carbon-high"), true);
+
+  // A catalog persisted before this fix still holds the disabled entries.
+  // Hydration (offline startup or a failed refresh) must drop them.
+  const flash = planGatedCatalog.models[0]!;
+  const disabledRoute = {
+    off: "gemini-4-carbon-disabled",
+    defaultRequestId: "gemini-4-carbon-disabled",
+  };
+  try {
+    hydrateAntigravityCatalog({
+      [ANTIGRAVITY_PERSIST_KEY]: {
+        catalog: {
+          models: [flash, { ...flash, id: "gemini-4-carbon-disabled", name: "Gemini 4 Carbon" }],
+          routing: { ...planGatedCatalog.routing, "gemini-4-carbon-disabled": disabledRoute },
+        },
+        checkedAt: 1,
+      },
+    });
+    const hydrated = getCurrentAntigravityCatalog();
+    assert.deepEqual(
+      hydrated.models.map((model) => model.id),
+      ["gemini-3.8-flash"],
+      "hydration drops persisted plan-disabled models",
+    );
+    assert.deepEqual(Object.keys(hydrated.routing), ["gemini-3.8-flash"]);
+
+    // A session that still has the old selection gets a plan explanation
+    // before any request, not a misleading capacity 429.
+    for (const effort of ["off", "high"]) {
+      assert.throws(
+        () => getAntigravityRequestModelId("gemini-4-carbon-disabled", effort),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message ===
+            "Antigravity lists gemini-4-carbon-disabled as unavailable on this account's plan " +
+              "(Google gates some models by subscription, e.g. Gemini 4 Carbon to Google AI Ultra). " +
+              "Next: check your plan with /antigravity.usage, run /antigravity.refresh, and select an available model.",
+      );
+    }
+
+    // The final runtime id is checked too: a route value and the explicit
+    // ANTIGRAVITY_RUNTIME_MODEL override must not reach a plan-disabled id.
+    const planError = (id: string) => (error: unknown) =>
+      error instanceof Error &&
+      error.message.startsWith(`Antigravity lists ${id} as unavailable on this account's plan `);
+    applyAntigravityCatalog({
+      models: [flash],
+      routing: { "gemini-3.8-flash": disabledRoute },
+    });
+    assert.throws(
+      () => getAntigravityRequestModelId("gemini-3.8-flash", "off"),
+      planError("gemini-4-carbon-disabled"),
+    );
+    applyAntigravityCatalog(planGatedCatalog);
+    const savedOverride = process.env.ANTIGRAVITY_RUNTIME_MODEL;
+    try {
+      process.env.ANTIGRAVITY_RUNTIME_MODEL = "gemini-4-carbon-disabled";
+      assert.throws(
+        () => resolveRequestRuntimeModel("gemini-3.8-flash", "high"),
+        planError("gemini-4-carbon-disabled"),
+      );
+      process.env.ANTIGRAVITY_RUNTIME_MODEL = " gemini-4-carbon-high ";
+      assert.equal(resolveRequestRuntimeModel("gemini-3.8-flash", "high"), "gemini-4-carbon-high");
+      // The override still bypasses catalog membership, as before.
+      assert.equal(resolveRequestRuntimeModel("gemini-3.6-flash", "high"), "gemini-4-carbon-high");
+      delete process.env.ANTIGRAVITY_RUNTIME_MODEL;
+      assert.equal(resolveRequestRuntimeModel("gemini-3.8-flash", "high"), "gemini-3.8-flash-high");
+    } finally {
+      if (savedOverride === undefined) delete process.env.ANTIGRAVITY_RUNTIME_MODEL;
+      else process.env.ANTIGRAVITY_RUNTIME_MODEL = savedOverride;
+    }
+  } finally {
+    resetAntigravityCatalogForTests();
+  }
+}
 
 console.log("model discovery: live metadata, routing, validation, persistence, and TTL passed");

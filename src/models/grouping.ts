@@ -1,7 +1,7 @@
 import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 import { ThinkingEffort } from "../types/enums.js";
 import type { AntigravityRouting, ModelInfoRaw } from "../types/types.js";
-import { isRecord } from "../utils/util.js";
+import { isPlanDisabledRuntimeModelId, isRecord } from "../utils/util.js";
 import { getAntigravityModelCost } from "./models.js";
 
 export type AntigravityCatalog = {
@@ -58,6 +58,7 @@ const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 export function isSelectableRuntimeModelId(id: string, info?: ModelInfoRaw): boolean {
   if (!/^[a-z0-9][a-z0-9_.-]*$/i.test(id) || /^MODEL_/i.test(id)) return false;
   if (/^(chat_|tab_)/i.test(id)) return false;
+  if (isPlanDisabledRuntimeModelId(id)) return false;
   if (/image/i.test(id) || /image/i.test(modelDisplayName(info) ?? "")) return false;
   if (info?.isInternal === true || info?.apiProvider === "API_PROVIDER_INTERNAL") return false;
   return true;

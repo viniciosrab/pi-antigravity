@@ -56,7 +56,7 @@ import {
   getCurrentAntigravityRouting,
   getMaxOutputTokens,
   advertisedSiblingRuntimes,
-  getAntigravityRequestModelId,
+  resolveRequestRuntimeModel,
   getFallbackRuntimeModel,
   getThinkingConfig,
   PROVIDER_ID,
@@ -1623,8 +1623,7 @@ export function streamAntigravity(
 
       const effort = opts.reasoning ?? "off";
       const isKnownModel = model.id in getCurrentAntigravityRouting();
-      const baseRuntimeModel =
-        antigravityEnv("RUNTIME_MODEL")?.trim() || getAntigravityRequestModelId(model.id, effort);
+      const baseRuntimeModel = resolveRequestRuntimeModel(model.id, effort);
 
       let initialRuntimeModel = baseRuntimeModel;
       // Skip pre-flight model discovery for known static models to optimize TTFT latency.

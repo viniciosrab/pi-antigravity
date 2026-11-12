@@ -11,7 +11,7 @@ import {
 } from "../diagnostics/diagnostics.js";
 import { assertSafeApiBaseUrl, safeError } from "../utils/security.js";
 import type { AntigravityApiKey, AvailableModelsRaw, DynamicModelInfo } from "../types/types.js";
-import { antigravityEnv, asString, isRecord } from "../utils/util.js";
+import { antigravityEnv, asString, isPlanDisabledRuntimeModelId, isRecord } from "../utils/util.js";
 import { antigravityFetch } from "../utils/http.js";
 import { registerDiscoveredModelEnums, registerModelEnum } from "../models/models.js";
 
@@ -196,13 +196,17 @@ function summarizeModelCandidate(value: unknown): string {
   return JSON.stringify(out).slice(0, 1200);
 }
 
-/** Runtime ids must not be internal placeholder enums, internal chats, or image endpoints. */
+/**
+ * Runtime ids must not be internal placeholder enums, internal chats, image
+ * endpoints, or entries the account's plan disables.
+ */
 export function isUsableRuntimeModelId(id: string): boolean {
   return (
     /^[a-z0-9][a-z0-9_.-]*$/i.test(id) &&
     !/\s/.test(id) &&
     !/^MODEL_/i.test(id) &&
     !/^(chat_|tab_)/i.test(id) &&
+    !isPlanDisabledRuntimeModelId(id) &&
     !/image/i.test(id)
   );
 }

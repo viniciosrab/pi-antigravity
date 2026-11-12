@@ -2,6 +2,7 @@ import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 import type { AntigravityRouting, ThinkingWire } from "../types/types.js";
 import { ThinkingEffort } from "../types/enums.js";
 import type { AntigravityCatalog } from "./grouping.js";
+import { antigravityEnv, isPlanDisabledRuntimeModelId } from "../utils/util.js";
 
 export const PROVIDER_ID = "antigravity";
 export const PROVIDER_NAME = "Antigravity";
@@ -377,8 +378,39 @@ export function resetAntigravityCatalogForTests(): void {
   currentRouting = { ...ANTIGRAVITY_ROUTING };
 }
 
+/**
+ * The server answers a plan-disabled runtime id with a generic
+ * RESOURCE_EXHAUSTED, so refuse it before the request with the real reason.
+ */
+function assertPlanEnabledRuntimeModel(id: string): string {
+  if (isPlanDisabledRuntimeModelId(id)) {
+    throw new Error(
+      `Antigravity lists ${id} as unavailable on this account's plan ` +
+        "(Google gates some models by subscription, e.g. Gemini 4 Carbon to Google AI Ultra). " +
+        "Next: check your plan with /antigravity.usage, run /antigravity.refresh, and select an available model.",
+    );
+  }
+  return id;
+}
+
 /** Resolve public model id + thinking effort to Antigravity runtime model id. */
 export function getAntigravityRequestModelId(modelId: string, effort: string | undefined): string {
+  // A session can still hold a plan-disabled selection from an older catalog.
+  assertPlanEnabledRuntimeModel(modelId);
+  return assertPlanEnabledRuntimeModel(routedRequestModelId(modelId, effort));
+}
+
+/**
+ * Runtime id for a request: the explicit ANTIGRAVITY_RUNTIME_MODEL override
+ * (which bypasses the catalog) or the catalog route for the selected model.
+ */
+export function resolveRequestRuntimeModel(modelId: string, effort: string | undefined): string {
+  const override = antigravityEnv("RUNTIME_MODEL")?.trim();
+  if (override) return assertPlanEnabledRuntimeModel(override);
+  return getAntigravityRequestModelId(modelId, effort);
+}
+
+function routedRequestModelId(modelId: string, effort: string | undefined): string {
   // A selected model can outlive a catalog refresh (for example in a resumed
   // session). Do not resurrect a retired route from the bootstrap catalog.
   if (

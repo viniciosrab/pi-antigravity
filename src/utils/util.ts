@@ -22,6 +22,15 @@ export function extraToolExposure(): { exposure?: "deferred" } {
   return antigravityEnv("DEFER_TOOLS") === "1" ? { exposure: "deferred" } : {};
 }
 
+/**
+ * Antigravity lists models the account's plan cannot use (for example Gemini 4
+ * Carbon outside Google AI Ultra) under a `-disabled` runtime id. Requests to
+ * those ids only fail with a generic RESOURCE_EXHAUSTED.
+ */
+export function isPlanDisabledRuntimeModelId(id: string): boolean {
+  return /-disabled$/i.test(id);
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
