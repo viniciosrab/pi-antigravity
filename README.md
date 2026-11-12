@@ -36,21 +36,15 @@ Want to equip Pi with MCP, web access, subagents, and todos? Install [`pi-essent
 
 ## Install
 
-Install from npm:
+This repository is a fork of [Rahularya01/pi-antigravity](https://github.com/Rahularya01/pi-antigravity). Install it from git:
 
 ```bash
-pi install npm:pi-antigravity
+pi install git:github.com/viniciosrab/pi-antigravity
 ```
 
-Or install the latest repository version:
+Restart Pi (or run `/reload`) after installation. To update later, use `pi update git:github.com/viniciosrab/pi-antigravity`.
 
-```bash
-pi install git:github.com/Rahularya01/pi-antigravity
-```
-
-On Oh My Pi, install the same package with `omp plugin install npm:pi-antigravity`.
-
-Restart Pi (or run `/reload`) after installation. To update the npm package later, use `pi update npm:pi-antigravity`.
+The [`pi-antigravity` npm package](https://www.npmjs.com/package/pi-antigravity) is the original project's release. It does not include this fork's unreleased changes (see [CHANGELOG.md](CHANGELOG.md)); install it with `pi install npm:pi-antigravity` if you want the upstream version instead.
 
 ## Quick start
 
@@ -183,6 +177,8 @@ A tier that answers with a generic resource-exhausted error is retried on the ot
 
 A successful refresh replaces the catalog with advertised models and routes, removing entries absent from all responding endpoints. Live capabilities and token limits override static defaults; grouped variants use the smallest advertised limits. Known thinking variants such as `gemini-3.8-flash-low` / `-medium` / `-high` become one public model. Unfamiliar suffixes and opaque IDs stay usable as exact runtime IDs when they pass the catalog filters.
 
+Antigravity also lists models your plan cannot use, under a `-disabled` runtime ID (for example `gemini-4-carbon-disabled` outside Google AI Ultra). These entries are never offered as selectable models and are dropped from the persisted catalog.
+
 Use `/antigravity.refresh` to bypass the four-hour cache, or `/antigravity.models` to view live availability and quota. Account/project changes and older cache formats trigger discovery on the next network-enabled refresh. Failed or unrecognized responses keep the last-known-good catalog; forced refreshes report the error. Arbitrary API schema changes can still require an extension update. `ANTIGRAVITY_USER_AGENT` overrides the default client fingerprint when a newer CLI version is required.
 
 ### Why Claude and GPT-OSS appear
@@ -233,7 +229,7 @@ All primary environment variables start with `ANTIGRAVITY_`. The legacy `NOAGY_`
 | `ANTIGRAVITY_PROJECT_ID` | Use a specific Cloud Code Assist project ID instead of discovery or the stable account fallback. |
 | `ANTIGRAVITY_CALLBACK_HOST` | Bind OAuth callback to `127.0.0.1`, `::1`, or `localhost` only. Defaults to `127.0.0.1`. |
 | `ANTIGRAVITY_USER_AGENT` | Override the request user-agent. |
-| `ANTIGRAVITY_RUNTIME_MODEL` | Pin requests to a runtime model ID, bypassing discovered/fallback routing. |
+| `ANTIGRAVITY_RUNTIME_MODEL` | Pin requests to a runtime model ID, bypassing discovered/fallback routing. Plan-disabled IDs (ending in `-disabled`) are refused. |
 | `ANTIGRAVITY_CATALOG_REFRESH_INTERVAL_MS` | Override catalog refresh TTL in ms. Defaults to 4 hours (`14400000`). Set to `0` to always refresh. |
 | `ANTIGRAVITY_CLIENT_ID` | Use a custom Google OAuth client ID. |
 | `ANTIGRAVITY_CLIENT_SECRET` | Use a custom Google OAuth client secret. Keep it out of source control and shell history. |
@@ -243,6 +239,7 @@ All primary environment variables start with `ANTIGRAVITY_`. The legacy `NOAGY_`
 | `ANTIGRAVITY_NO_PREWARM` | Set to `1` to skip the TLS pre-warm request made on the first Antigravity request. |
 | `ANTIGRAVITY_NO_EXTRA_TOOLS` | Set to `1` to stop registering the model-facing `google_search`, `read_url_content`, and `generate_image` tools. The `/antigravity.search`, `/antigravity.fetch`, and `/antigravity.image` commands stay available. |
 | `ANTIGRAVITY_USE_CREDITS` | Set to `1` (or `0`) to explicitly enable (or disable) automatic AI credit overages when standard quota is depleted. Defaults to inheriting `useG1Credits` from `~/.gemini/antigravity-cli/settings.json` only when that file sets the flag. Otherwise credit overages stay off. |
+| `ANTIGRAVITY_NO_SOURCE_ENRICH` | Set to `1` to skip resolving grounding redirects and page titles for `google_search` citations, saving one extra request per source. |
 | `ANTIGRAVITY_NO_SEARCH_TOOL` | Set to `1` to skip only the `google_search` tool, e.g. when another extension provides web search. |
 | `ANTIGRAVITY_NO_FETCH_TOOL` | Set to `1` to skip only the `read_url_content` tool, e.g. when another extension already fetches URLs. |
 | `ANTIGRAVITY_NO_IMAGE_TOOL` | Set to `1` to skip only the `generate_image` tool. |
@@ -268,6 +265,8 @@ Provider requests reuse a keep-alive connection pool when the runtime supports i
   - **SSH tunnel (reusable):** From the machine with the browser, run `ssh -N -L 51121:127.0.0.1:51121 <user>@<server>` and keep it open, then run `/login antigravity` on the server. The redirect to `localhost:51121` tunnels through to the local callback automatically.
 - **OAuth callback will not start:** Ensure port `51121` is free and `ANTIGRAVITY_CALLBACK_HOST` is a permitted loopback address.
 - **Model is unavailable:** Run `/antigravity.refresh`, then select a model from the updated list. Availability is account- and service-dependent; a generic resource-exhausted response alone does not prove a model was retired. Discovery uses the backend's recommended model list when supplied, since the raw catalog can retain old runtime IDs. If a resumed session selects a model removed by discovery, select another model; static routes and compatibility fallbacks do not restore models absent from the refreshed catalog.
+- **"unavailable on this account's plan":** The selected model (or `ANTIGRAVITY_RUNTIME_MODEL`) is a plan-gated `-disabled` entry, usually from an older catalog in a resumed session. Check your plan with `/antigravity.usage`, run `/antigravity.refresh`, and select an available model. Without this check the server would answer with a misleading capacity 429.
+- **`Warning: No models match pattern "antigravity/<id>-disabled"`:** Your Pi settings still enable a plan-gated entry that an older release offered. Remove it from `enabledModels` (or `models`) in `~/.pi/agent/settings.json`; it was never usable on your plan.
 - **Claude/GPT tool-call schema error:** Upgrade to the latest package release. The provider adapts Pi's JSON Schema tool definitions for the Cloud Code Assist custom-tool bridge.
 - **Quota or rate limit:** Run `/antigravity.usage`. A `429` response usually indicates quota or rate limiting; changing models may still draw from the same shared pool.
 - **Need a safe diagnostic:** `/antigravity.doctor` redacts recognized secrets from its error output. Still review output before sharing it publicly.
@@ -282,6 +281,8 @@ corepack enable
 yarn install --immutable
 yarn check
 ```
+
+The toolchain builds against Pi 1.5 types and type-checks with TypeScript 7 (the `@typescript/native` alias). ESLint still uses the TypeScript 6 API through the `typescript` alias to `@typescript/typescript6` until typescript-eslint supports TypeScript 7. The runtime peer range is unchanged: the extension still runs on Pi 0.80 and later.
 
 For an optional live fetch check, run `yarn smoke:fetch` after `/login antigravity`. It exercises the registered tool on three public URLs and checks that reading a saved page needs neither network nor credentials. Missing expected page text is a failure unless explicit retrieval failures explain a degraded copy, which is an upstream-availability warning. An unobserved MDN canonical alias is also a warning; when that alias is observed, redirect provenance is checked. It uses saved Pi credentials (`PI_AUTH_PATH` can select another auth file), leaves saved pages in the temp directory, and is excluded from `yarn check` and default CI. Exit codes: 0 for successful coverage, 1 for integration failures, 2 when upstream availability limits coverage, no page passes, or no saved page can be checked.
 
