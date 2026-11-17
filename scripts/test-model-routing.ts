@@ -1578,6 +1578,32 @@ const trailingPiDocsPrompt = buildRequest(
   "gemini-3.7-flash-low",
 );
 assert.equal(trailingPiDocsPrompt.request.systemInstruction.parts[0]?.text, "Be helpful.");
+// The match ends at the first Pi </docs>, whatever separator follows it.
+const singleNewlineDocsPrompt = buildRequest(
+  flash37Model,
+  {
+    ...dummyContext,
+    systemPrompt: `Be helpful.\n\n${piDocsSection}\n<rules>\n- Be concise\n</rules>\n\n<docs>\nProject docs live in docs/.\n</docs>`,
+  },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  singleNewlineDocsPrompt.request.systemInstruction.parts[0]?.text,
+  "Be helpful.\n<rules>\n- Be concise\n</rules>\n\n<docs>\nProject docs live in docs/.\n</docs>",
+);
+const trailingNewlineDocsPrompt = buildRequest(
+  flash37Model,
+  { ...dummyContext, systemPrompt: `Be helpful.\n\n${piDocsSection}\n` },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.ok(
+  !/Pi documentation/.test(trailingNewlineDocsPrompt.request.systemInstruction.parts[0]?.text || ""),
+  "Pi <docs> followed by a trailing newline must still be removed",
+);
 const userDocsPrompt = buildRequest(
   flash37Model,
   { ...dummyContext, systemPrompt: "Be helpful.\n\n<docs>\nProject docs live in docs/.\n</docs>" },

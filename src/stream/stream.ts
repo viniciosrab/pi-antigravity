@@ -939,7 +939,7 @@ function mapToolChoiceMode(
  * false 429 on its own, and it only matters for questions about Pi itself.
  */
 const PI_DOCS_SECTION =
-  /(?:\n\n)?<docs>\nPi documentation \(read only when the user asks about the harness itself[\s\S]*?\n<\/docs>(?=\n\n|$)/g;
+  /(?:\n\n)?<docs>\nPi documentation \(read only when the user asks about the harness itself[\s\S]*?\n<\/docs>/g;
 
 /**
  * Neutralize system prompt phrases that trigger false 429 RESOURCE_EXHAUSTED
