@@ -4,11 +4,6 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-### Added
-
-- **Gemini Enterprise routing:** `ANTIGRAVITY_LOCATION=eu|us` (or `ANTIGRAVITY_ENTERPRISE=1`) sends inference only to the documented Business AI Code host for that location. Consumer `cloudcode-pa` fallback is not used, so a regional license is not retried on the endpoint that returns error #3501. Image prompts and reference images are not uploaded while enterprise routing is active.
-- **`read_url_content` tool:** Reads public pages through Google's Antigravity fetch service and converts HTML to Markdown. Inadequate cached copies retry live, with useful cached content retained on recovery failure. The tool inspects metadata and article-matched JSON-LD before cleanup, and can recover through one advertised same-origin Markdown or supported article-JSON representation. Results distinguish source completeness, suspected content problems, and output truncation, and report retrieval attempts and provenance. Pages too long for one answer are saved whole to a private temp file named in the answer. `/antigravity.fetch [--raw] <url>` exposes interactive fetching; raw mode preserves the crawled source. Disable with `ANTIGRAVITY_NO_FETCH_TOOL=1`, `ANTIGRAVITY_NO_EXTRA_TOOLS=1`, or the `read-url-content` resource in `pi config`.
-
 ### Changed
 
 - Development toolchain now builds against Pi 1.5 types (`@earendil-works/pi-ai` / `pi-coding-agent` 1.5) and type-checks with TypeScript 7; ESLint keeps the TypeScript 6 API through the `@typescript/typescript6` alias until typescript-eslint supports TS 7. No user-visible change: peer ranges are unchanged and the extension still runs on Pi 0.80 and later.
@@ -16,7 +11,41 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - **Plan-gated models:** Antigravity lists models the account's plan cannot use under a `-disabled` runtime id (for example `gemini-4-carbon-disabled` outside Google AI Ultra). These entries are no longer offered as selectable models, persisted catalogs drop them, and a session that still selects one gets a plan explanation instead of a misleading capacity 429. The catalog schema version is bumped so the next start rediscovers models.
-- Declare `typebox` as a `"*"` peer dependency instead of a runtime dependency, as Pi requires for host-provided packages. This clears Pi's "Host-provided extension packages must be declared in peerDependencies" extension warning and avoids installing a duplicate TypeBox copy.
+
+## [0.14.0] - 2026-11-14
+
+### Added
+
+- **Gemini 4 Hydrogen & Oxygen support:** Added dynamic discovery allowlist for selectable Hydrogen and Oxygen variants beyond `agentModelSorts` (#134), `xhigh` thinking level grouping (`-xhigh`, `(XHigh)`, `(X-High)`), fallback routing, list pricing ($1.50/M input, $7.50/M output, $0.075/M cache read), 262,144 output token limit, and `-xhigh` sibling capacity fallback (#132, #133, #136).
+
+### Changed
+
+- **Development dependencies & security:** Updated `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` to `^1.5.0` (#128) and resolved `minimatch` to `11.0.3` to remediate GHSA-g3hv-75wg-m249 (`<11.0.1`).
+
+### Fixed
+
+- **Disabled model filtering:** Exclude backend entries flagged `disabled: true` or suffixed `-disabled` from model discovery even when listed in `agentModelSorts` (#132, #136).
+- **Cross-provider tool observation mimicry:** Keep unsigned tool-call turn boundaries separated, track degraded observations accurately without false triggers on quoted markers, handle reused/colliding tool call IDs, and append a recency history note (#118).
+- **Pi 1.5.x compatibility:** Import `Type` from `typebox` in `read_url_content` instead of `@earendil-works/pi-ai` and narrow `ProviderModelConfig` types for text models.
+- **False 429 on default Pi prompt:** Sanitize Pi harness prompt fingerprints (`"running inside pi, a coding agent harness"`, `"coding assistant running inside pi"`, `"coding agent inside pi"`) and `"practical, and tool-aware."` in `systemInstruction` (including the default `ANTIGRAVITY_SYSTEM_INSTRUCTION` fallback) to prevent proxy-level `429 RESOURCE_EXHAUSTED` rejections (#137, #139, #142).
+
+## [0.13.0] - 2026-11-12
+
+### Added
+
+- **Gemini Enterprise routing:** `ANTIGRAVITY_LOCATION=eu|us` (or `ANTIGRAVITY_ENTERPRISE=1`) sends inference only to the documented Business AI Code host for that location. Consumer `cloudcode-pa` fallback is not used, so a regional license is not retried on the endpoint that returns error #3501. Image prompts and reference images are not uploaded while enterprise routing is active. Requires `ANTIGRAVITY_ENTERPRISE_PROJECT` and `ANTIGRAVITY_USER_TIER` (#106).
+- **`read_url_content` tool:** Reads public pages through Google's Antigravity fetch service and converts HTML to Markdown. Inadequate cached copies retry live, with useful cached content retained on recovery failure. The tool inspects metadata and article-matched JSON-LD before cleanup, and can recover through one advertised same-origin Markdown or supported article-JSON representation. Results distinguish source completeness, suspected content problems, and output truncation, and report retrieval attempts and provenance. Pages too long for one answer are saved whole to a private temp file named in the answer. `/antigravity.fetch [--raw] <url>` exposes interactive fetching; raw mode preserves the crawled source. Disable with `ANTIGRAVITY_NO_FETCH_TOOL=1`, `ANTIGRAVITY_NO_EXTRA_TOOLS=1`, or the `read-url-content` resource in `pi config` (#102).
+- **Google One credit overages:** `/antigravity.credits` checks the reported balance and toggles `enabledCreditTypes: ["GOOGLE_ONE_AI"]`. Overages stay off unless enabled by `ANTIGRAVITY_USE_CREDITS`, Pi settings, or the official CLI settings (#112).
+- **Reference images:** `generate_image` accepts up to four project-relative PNG, JPEG, WebP, or GIF references, 10 MB each. Paths must stay inside the working directory after `realpath` (#104).
+
+### Changed
+
+- **Client fingerprint:** Default User-Agent is `antigravity/cli/1.5.5`, matching the current official `agy` CLI.
+- **Model prices:** Each Gemini and Claude model uses its own published per-million-token rate instead of one shared Flash or Pro placeholder (#103).
+
+### Fixed
+
+- Declare `typebox` as a `"*"` peer dependency instead of a runtime dependency, as Pi requires for host-provided packages. This clears Pi's "Host-provided extension packages must be declared in peerDependencies" extension warning and avoids installing a duplicate TypeBox copy (#116, #119).
 - **Thinking-off and capacity 429s:** A generic `RESOURCE_EXHAUSTED` response now tries the other endpoints and one same-generation sibling tier, so `gemini-3.8-flash` with reasoning off is not stuck on a dead `-low` runtime and `gemini-4-argon-high` can step down while quota remains (#125, #122). Hard quota walls with a reset time are unchanged.
 - **`before_provider_request`:** `streamAntigravity` applies `onPayload` to the final request body before it is sent (#126).
 - **Staggered model rollouts:** Merging `fetchAvailableModels` across endpoints now unions the curated `agentModelSorts` recommendation lists instead of letting the last endpoint overwrite them. Models that launch on the daily/sandbox endpoints before production (e.g. Gemini 4 Carbon) stay selectable after `/antigravity.refresh` (#123).

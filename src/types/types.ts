@@ -52,8 +52,9 @@ export type AntigravityRouting = {
 export const ANTIGRAVITY_API = "antigravity-api" as const;
 export type AntigravityApi = typeof ANTIGRAVITY_API;
 
-export type AntigravityStreamOptions = Omit<SimpleStreamOptions, "toolChoice"> & {
+export type AntigravityStreamOptions = Omit<SimpleStreamOptions, "toolChoice" | "reasoning"> & {
   toolChoice?: ToolChoice;
+  reasoning?: ThinkingEffort;
 };
 
 export type GeminiTextPart = { text: string; thoughtSignature?: string };
@@ -285,6 +286,7 @@ export type ModelInfoRaw = {
   supportsThinking?: unknown;
   supportsImages?: unknown;
   recommended?: unknown;
+  disabled?: unknown;
   quotaInfo?: {
     remainingFraction?: unknown;
     resetTime?: unknown;

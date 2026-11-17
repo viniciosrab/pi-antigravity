@@ -1235,10 +1235,12 @@ const unsignedToolContext = {
   ],
 } as unknown as Context;
 const convertedUnsigned = convertMessages(flash37Model, unsignedToolContext, geminiRuntime);
-assert.equal(convertedUnsigned.length, 1);
-assert.equal(convertedUnsigned[0]?.role, "user");
+assert.equal(convertedUnsigned.length, 3);
+assert.deepEqual(convertedUnsigned[0]?.parts, [{ text: "read file" }]);
+assert.equal(convertedUnsigned[1]?.role, "model");
+assert.equal(convertedUnsigned[2]?.role, "user");
 assert.ok(
-  convertedUnsigned[0]?.parts.some((p) => "text" in p && p.text.includes("Observation from `read`")),
+  convertedUnsigned[2]?.parts.some((p) => "text" in p && p.text.includes("Observation from `read`")),
 );
 
 // Same-model unsigned tool turns must also drop unsigned thinking blocks so orphaned
@@ -1274,8 +1276,10 @@ const convertedSameModelUnsigned = convertMessages(
   sameModelUnsignedToolContext,
   geminiRuntime,
 );
-assert.equal(convertedSameModelUnsigned.length, 1);
+assert.equal(convertedSameModelUnsigned.length, 3);
 assert.equal(convertedSameModelUnsigned[0]?.role, "user");
+assert.equal(convertedSameModelUnsigned[1]?.role, "model");
+assert.equal(convertedSameModelUnsigned[2]?.role, "user");
 assert.ok(
   !convertedSameModelUnsigned.some((turn) =>
     turn.parts.some((part) => "thought" in part && part.thought === true),
@@ -1294,6 +1298,26 @@ assert.match(
   degradedPromptReq.request.systemInstruction.parts[1]?.text || "",
   /never simulate tool calls/i,
 );
+const lastDegradedTurn = degradedPromptReq.request.contents.at(-1);
+assert.equal(lastDegradedTurn?.role, "user");
+assert.match(JSON.stringify(lastDegradedTurn?.parts.at(-1)), /emit a real functionCall/);
+
+// A user quoting the marker is not a degraded tool result.
+const quotedMarkerContext = {
+  systemPrompt: "You are Pi.",
+  messages: [{ role: "user", content: "Explain [Observation from a log]", timestamp: Date.now() }],
+} as unknown as Context;
+const quotedMarkerRequest = buildRequest(
+  flash37Model,
+  quotedMarkerContext,
+  "test-proj",
+  {},
+  geminiRuntime,
+);
+assert.equal(quotedMarkerRequest.request.systemInstruction.parts.length, 1);
+assert.deepEqual(quotedMarkerRequest.request.contents[0]?.parts, [
+  { text: "Explain [Observation from a log]" },
+]);
 
 const parallelSignedContext = {
   messages: [
@@ -1349,6 +1373,115 @@ assert.ok(
   convertedParallel[2]?.parts.every((p) => "functionResponse" in p),
   "all parallel results remain functionResponses",
 );
+const mixedHistoryRequest = buildRequest(
+  flash37Model,
+  {
+    ...parallelSignedContext,
+    systemPrompt: "You are Pi.",
+    messages: [...unsignedToolContext.messages, ...parallelSignedContext.messages],
+  },
+  "test-proj",
+  {},
+  geminiRuntime,
+);
+const mixedLastTurn = mixedHistoryRequest.request.contents.at(-1);
+assert.equal(mixedLastTurn?.role, "user");
+assert.equal(mixedLastTurn?.parts.filter((part) => "functionResponse" in part).length, 2);
+assert.match(JSON.stringify(mixedLastTurn?.parts.at(-1)), /emit a real functionCall/);
+
+// A later signed call can reuse an ID from a previously flattened call.
+const reusedIdContext = {
+  messages: [
+    ...unsignedToolContext.messages,
+    ...parallelSignedContext.messages.map((message) => {
+      if (message.role === "assistant") {
+        return {
+          ...message,
+          content: message.content.map((block) =>
+            block.type === "toolCall" && block.id === "call-1"
+              ? { ...block, id: "call-prev-1" }
+              : block,
+          ),
+        };
+      }
+      return message.role === "toolResult" && message.toolCallId === "call-1"
+        ? { ...message, toolCallId: "call-prev-1" }
+        : message;
+    }),
+  ],
+} as Context;
+const reusedIdResult = convertMessages(flash37Model, reusedIdContext, geminiRuntime).at(-1);
+assert.equal(reusedIdResult?.parts.filter((part) => "functionResponse" in part).length, 2);
+
+// Sanitized aliases must not overwrite or delete another call's raw ID.
+const collidingIdsContext = {
+  messages: [
+    { role: "user", content: "read both", timestamp: Date.now() },
+    {
+      role: "assistant",
+      content: [
+        { type: "toolCall", id: "call:1", name: "read", arguments: { path: "a" } },
+        { type: "toolCall", id: "call_1", name: "read", arguments: { path: "b" } },
+      ],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-4o",
+      usage: zeroUsage,
+      stopReason: "toolUse",
+      timestamp: Date.now(),
+    },
+    ...["call:1", "call_1"].map((toolCallId) => ({
+      role: "toolResult",
+      toolCallId,
+      toolName: "read",
+      content: [{ type: "text", text: `result for ${toolCallId}` }],
+      isError: false,
+      timestamp: Date.now(),
+    })),
+  ],
+} as unknown as Context;
+const collidingResults = convertMessages(flash37Model, collidingIdsContext, geminiRuntime).at(-1);
+assert.equal(collidingResults?.parts.length, 2);
+assert.ok(collidingResults?.parts.every((part) => "text" in part));
+assert.match(JSON.stringify(collidingResults?.parts[0]), /result for call:1/);
+assert.match(JSON.stringify(collidingResults?.parts[1]), /result for call_1/);
+assert.match(JSON.stringify(collidingResults?.parts[0]), /path.*a/);
+assert.match(JSON.stringify(collidingResults?.parts[1]), /path.*b/);
+
+// Multiple empty-ID calls to the same tool keep ordered per-call arguments and flatten every result.
+const emptyIdsContext = {
+  messages: [
+    { role: "user", content: "read both", timestamp: Date.now() },
+    {
+      role: "assistant",
+      content: [
+        { type: "toolCall", id: "", name: "read", arguments: { path: "first.ts" } },
+        { type: "toolCall", id: "", name: "read", arguments: { path: "second.ts" } },
+      ],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-4o",
+      usage: zeroUsage,
+      stopReason: "toolUse",
+      timestamp: Date.now(),
+    },
+    ...["first result", "second result"].map((text) => ({
+      role: "toolResult",
+      toolCallId: "",
+      toolName: "read",
+      content: [{ type: "text", text }],
+      isError: false,
+      timestamp: Date.now(),
+    })),
+  ],
+} as unknown as Context;
+const emptyIdResults = convertMessages(flash37Model, emptyIdsContext, geminiRuntime).at(-1);
+assert.equal(emptyIdResults?.parts.length, 2);
+assert.ok(emptyIdResults?.parts.every((part) => "text" in part));
+assert.match(JSON.stringify(emptyIdResults?.parts[0]), /first\.ts/);
+assert.match(JSON.stringify(emptyIdResults?.parts[0]), /first result/);
+assert.match(JSON.stringify(emptyIdResults?.parts[1]), /second\.ts/);
+assert.match(JSON.stringify(emptyIdResults?.parts[1]), /second result/);
 
 const abortedContext = {
   messages: [
@@ -1378,6 +1511,85 @@ const withPiPrompt = buildRequest(
 );
 assert.equal(withPiPrompt.request.systemInstruction.parts.length, 1);
 assert.equal(withPiPrompt.request.systemInstruction.parts[0]?.text, "You are Pi. Follow AGENTS.md.");
+
+// Pi default prompt fingerprints that trigger false 429 RESOURCE_EXHAUSTED are neutralized (#137, #139).
+const defaultPiHarnessPrompt = buildRequest(
+  flash37Model,
+  {
+    ...dummyContext,
+    systemPrompt:
+      "You are a coding assistant running inside pi, a coding agent harness. Help users inspect files, run commands, and modify code.",
+  },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  defaultPiHarnessPrompt.request.systemInstruction.parts[0]?.text,
+  "You are a coding assistant running inside your development environment. Help users inspect files, run commands, and modify code.",
+);
+
+const shortPiPrompt = buildRequest(
+  flash37Model,
+  {
+    ...dummyContext,
+    systemPrompt: "You are a coding assistant running inside pi. Be brief.",
+  },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  shortPiPrompt.request.systemInstruction.parts[0]?.text,
+  "You are a coding assistant running inside your development environment. Be brief.",
+);
+
+const unrelatedIdentifierPrompt = buildRequest(
+  flash37Model,
+  {
+    ...dummyContext,
+    systemPrompt: "Keep files running inside pi.js untouched.",
+  },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  unrelatedIdentifierPrompt.request.systemInstruction.parts[0]?.text,
+  "Keep files running inside pi.js untouched.",
+);
+
+// Case variants, "coding agent inside pi", and default fallback instruction tail ("practical, and tool-aware.") (#142).
+for (const variant of [
+  "You are a coding assistant RUNNING INSIDE PI.",
+  "A coding agent inside pi should be concise.",
+]) {
+  const res = buildRequest(
+    flash37Model,
+    { ...dummyContext, systemPrompt: variant },
+    "test-proj",
+    {},
+    "gemini-3.7-flash-low",
+  );
+  assert.ok(!/inside pi/i.test(res.request.systemInstruction.parts[0]?.text || ""), variant);
+}
+
+const fallbackSystemPromptReq = buildRequest(
+  flash37Model,
+  { ...dummyContext, systemPrompt: "" },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.ok(
+  !/tool-aware\./i.test(fallbackSystemPromptReq.request.systemInstruction.parts[0]?.text || ""),
+  "default ANTIGRAVITY_SYSTEM_INSTRUCTION tail must also be neutralized",
+);
+assert.ok(
+  fallbackSystemPromptReq.request.systemInstruction.parts[0]?.text?.includes(
+    "practical, and tool aware.",
+  ),
+);
 
 // Skill-only turns are injected instructions, not user prompts. The request remains
 // valid without inventing a user message, and the Skill is preserved as system context.
