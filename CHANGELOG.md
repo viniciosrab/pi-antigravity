@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - **Plan-gated models:** Antigravity lists models the account's plan cannot use under a `-disabled` runtime id (for example `gemini-4-carbon-disabled` outside Google AI Ultra). These entries are no longer offered as selectable models, persisted catalogs drop them, and a session that still selects one gets a plan explanation instead of a misleading capacity 429. The catalog schema version is bumped so the next start rediscovers models.
+- **False 429 on the Pi 1.5 prompt, again:** Antigravity now also rejects the prompt that the previous fix produced (`"a coding assistant running inside your development environment"` followed by `"Help users inspect files, run commands, and modify code."`) and Pi 1.5's `<docs>` section that indexes Pi's own documentation. Every model then failed with `This model is unavailable right now (Resource has been exhausted ...)`. The preamble is now rewritten to `"an assistant in a development environment"`, and the Pi `<docs>` section is dropped from `systemInstruction`; other sections, including a user's own `<docs>` block, are kept.
 
 ## [0.14.0] - 2026-11-14
 

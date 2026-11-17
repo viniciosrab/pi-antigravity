@@ -935,11 +935,22 @@ function mapToolChoiceMode(
 }
 
 /**
+ * Pi 1.5 `<docs>` section indexing Pi's own documentation. Its topic list triggers a
+ * false 429 on its own, and it only matters for questions about Pi itself.
+ */
+const PI_DOCS_SECTION =
+  /(?:\n\n)?<docs>\nPi documentation \(read only when the user asks about the harness itself[\s\S]*?\n<\/docs>(?=\n\n|$)/g;
+
+/**
  * Neutralize system prompt phrases that trigger false 429 RESOURCE_EXHAUSTED
  * responses from the Antigravity proxy when paired with `requestType: "agent"`.
+ * The "development environment" rewrite is itself rejected when followed by Pi's
+ * "Help users inspect files, run commands, and modify code." sentence, so the
+ * last step neutralizes it further.
  */
 export function sanitizeSystemPrompt(text: string): string {
   return text
+    .replace(PI_DOCS_SECTION, "")
     .replace(
       /running inside pi,\s*a coding agent harness/gi,
       "running inside your development environment",
@@ -953,7 +964,11 @@ export function sanitizeSystemPrompt(text: string): string {
       /(coding agent )inside pi(?=[.,!?;:\s]|$)(?!\.\w)/gi,
       "$1inside your development environment",
     )
-    .replace(/\bpractical,\s*and tool-aware\./gi, "practical, and tool aware.");
+    .replace(/\bpractical,\s*and tool-aware\./gi, "practical, and tool aware.")
+    .replace(
+      /\ba coding assistant running inside your development environment\b/gi,
+      "an assistant in a development environment",
+    );
 }
 
 /** Exported for unit tests. */
