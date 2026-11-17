@@ -1524,9 +1524,96 @@ const defaultPiHarnessPrompt = buildRequest(
   {},
   "gemini-3.7-flash-low",
 );
+// The previous rewrite ("a coding assistant running inside your development environment")
+// is itself rejected with a false 429 when followed by the "Help users ..." sentence.
 assert.equal(
   defaultPiHarnessPrompt.request.systemInstruction.parts[0]?.text,
-  "You are a coding assistant running inside your development environment. Help users inspect files, run commands, and modify code.",
+  "You are an assistant in a development environment. Help users inspect files, run commands, and modify code.",
+);
+
+const previouslySanitizedPrompt = buildRequest(
+  flash37Model,
+  {
+    ...dummyContext,
+    systemPrompt:
+      "You are a coding assistant running inside your development environment. Help users inspect files, run commands, and modify code.",
+  },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  previouslySanitizedPrompt.request.systemInstruction.parts[0]?.text,
+  "You are an assistant in a development environment. Help users inspect files, run commands, and modify code.",
+);
+
+// Pi 1.5 appends a <docs> section indexing its own documentation; its topic list also
+// triggers the false 429. Only that Pi section is dropped; neighbouring sections stay.
+const piDocsSection = [
+  "<docs>",
+  "Pi documentation (read only when the user asks about the harness itself, its SDK, extensions, themes, skills, or TUI):",
+  "- Main documentation: /opt/pi/README.md",
+  "- When asked about: SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md)",
+  "</docs>",
+].join("\n");
+const sectionedPiPrompt = buildRequest(
+  flash37Model,
+  {
+    ...dummyContext,
+    systemPrompt: `Be helpful.\n\n<rules>\n- Be concise\n</rules>\n\n${piDocsSection}\n\n<cwd>\n/work\n</cwd>`,
+  },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  sectionedPiPrompt.request.systemInstruction.parts[0]?.text,
+  "Be helpful.\n\n<rules>\n- Be concise\n</rules>\n\n<cwd>\n/work\n</cwd>",
+);
+const trailingPiDocsPrompt = buildRequest(
+  flash37Model,
+  { ...dummyContext, systemPrompt: `Be helpful.\n\n${piDocsSection}` },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(trailingPiDocsPrompt.request.systemInstruction.parts[0]?.text, "Be helpful.");
+// The match ends at the first Pi </docs>, whatever separator follows it.
+const singleNewlineDocsPrompt = buildRequest(
+  flash37Model,
+  {
+    ...dummyContext,
+    systemPrompt: `Be helpful.\n\n${piDocsSection}\n<rules>\n- Be concise\n</rules>\n\n<docs>\nProject docs live in docs/.\n</docs>`,
+  },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  singleNewlineDocsPrompt.request.systemInstruction.parts[0]?.text,
+  "Be helpful.\n<rules>\n- Be concise\n</rules>\n\n<docs>\nProject docs live in docs/.\n</docs>",
+);
+const trailingNewlineDocsPrompt = buildRequest(
+  flash37Model,
+  { ...dummyContext, systemPrompt: `Be helpful.\n\n${piDocsSection}\n` },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.ok(
+  !/Pi documentation/.test(trailingNewlineDocsPrompt.request.systemInstruction.parts[0]?.text || ""),
+  "Pi <docs> followed by a trailing newline must still be removed",
+);
+const userDocsPrompt = buildRequest(
+  flash37Model,
+  { ...dummyContext, systemPrompt: "Be helpful.\n\n<docs>\nProject docs live in docs/.\n</docs>" },
+  "test-proj",
+  {},
+  "gemini-3.7-flash-low",
+);
+assert.equal(
+  userDocsPrompt.request.systemInstruction.parts[0]?.text,
+  "Be helpful.\n\n<docs>\nProject docs live in docs/.\n</docs>",
 );
 
 const shortPiPrompt = buildRequest(
@@ -1541,7 +1628,7 @@ const shortPiPrompt = buildRequest(
 );
 assert.equal(
   shortPiPrompt.request.systemInstruction.parts[0]?.text,
-  "You are a coding assistant running inside your development environment. Be brief.",
+  "You are an assistant in a development environment. Be brief.",
 );
 
 const unrelatedIdentifierPrompt = buildRequest(
